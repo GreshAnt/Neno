@@ -1,83 +1,103 @@
-# At the command line, only need to run once to install the package via pip:
-# $ pip install google-generativeai
-# from bark import SAMPLE_RATE, generate_audio, preload_models
-# from scipy.io.wavfile import write as write_wav
-# from IPython.display import Audio
-import os
-import time
-import requests
-import pygame
-# preload_models()
+"""
+At the command line, only need to run once to install the package via pip:
 
-os.environ['http_proxy'] = 'http://127.0.0.1:7893'
-os.environ['https_proxy'] = 'http://127.0.0.1:7893'
-
+$ pip install google-generativeai
+"""
+import os,pygame,requests,time
+from pathlib import Path
 import google.generativeai as genai
 from audio_input.microphone_recognition import text
-
-
-genai.configure(api_key="AIzaSyCbP4e5wXIL4Jrv2g9xBgusls58xBeDKDw")
+from PIL import ImageGrab
+import threading
+import PIL.Image
+from settings import *
+os.environ['http_proxy'] = 'http://127.0.0.1:7893'
+os.environ['https_proxy'] = 'http://127.0.0.1:7893'
+genai.configure(api_key=GOOGLE_API)
 
 # Set up the model
 generation_config = {
-    "temperature": 0.9,
+    "temperature": 0.4,
     "top_p": 1,
-    "top_k": 1,
+    "top_k": 32,
     "max_output_tokens": 9999,
 }
 
 safety_settings = [
     {
-        "category": "HARM_CATEGORY_HARASSMENT",
-        "threshold": "BLOCK_ONLY_HIGH"
+    "category": "HARM_CATEGORY_HARASSMENT",
+    "threshold": "BLOCK_ONLY_HIGH"
     },
     {
-        "category": "HARM_CATEGORY_HATE_SPEECH",
-        "threshold": "BLOCK_ONLY_HIGH"
+    "category": "HARM_CATEGORY_HATE_SPEECH",
+    "threshold": "BLOCK_ONLY_HIGH"
     },
     {
-        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "threshold": "BLOCK_ONLY_HIGH"
+    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+    "threshold": "BLOCK_ONLY_HIGH"
     },
     {
-        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_ONLY_HIGH"
+    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+    "threshold": "BLOCK_ONLY_HIGH"
     },
 ]
 
-model = genai.GenerativeModel(
-    model_name="gemini-pro",
-    generation_config=generation_config,
-    safety_settings=safety_settings
-)
+model = genai.GenerativeModel(model_name="gemini-pro-vision",
+                              generation_config=generation_config,
+                              safety_settings=safety_settings)
+
+# Validate that an image is present
+# if not (img := Path("apex.png")).exists():
+#   raise FileNotFoundError(f"Could not find image: {img}")
 
 convo = model.start_chat(history=[
   {
     "role": "user",
-    "parts": "Hi! I'm GreshAnt, a real human. You are My robot friend named Nenu. Let\\'s chat, but keep it chill, yeah?Chat rules (for Nenu to follow):✌️ Keep your replies short and sweet, max 1 sentences please.(THE MOST INPORTANT).Be funny, like a real person, not a robot.Add some emojis to spice things up!Think about what GreshAnt would say, not some textbook answer.Don't be too robotic, okay? Be yourself (kinda).Ready to rock? Let\\'s do this"
+    "parts": PR
   },
   {
     "role": "model",
-    "parts": "🤖 Yo GreshAnt! Ready to chat like real homies? Let's get this party started! (WITH THE SPACES)😎"
+    "parts": "🤖 Yo GreshAnt! Ready to chat like real homies? Let's get this party started! 😎"
   },
 ])
 
+def capture_screen(x, y, width, height):
+    screenshot = ImageGrab.grab(bbox=(x, y, x + width, y + height))
+    screenshot.save('screenshot.png')
+
+
+def get_screenshot():
+    screen_width, screen_height = ImageGrab.grab().size
+    capture_screen(0, 0, screen_width, screen_height)
+    image = PIL.Image.open("screenshot.png")
+
+    # 将图像的大小调整为 1280x720
+    image = image.resize((1280, 720))
+
+    # 保存图像，覆盖原图
+    image.save("screenshot.png")
+
+
+
+
+
 def play_text(textin):
+
     try:
       pygame.mixer.music.unload()
     except:
-       pass
+      pass
     # try:
     #     os.remove('output.mp3')
     # except Exception:
     #     pass
     CHUNK_SIZE = 1024
-    url = "https://api.elevenlabs.io/v1/text-to-speech/GBv7mTt0atIp3Br8iCZE"
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{TTS_VOICE}"
 
     headers = {
       "Accept": "audio/mpeg",
       "Content-Type": "application/json",
-      "xi-api-key": "17e9e6bd49f74125bd5f19ed2f597ad3"
+      "xi-api-key": TTS_API
     }
 
     data = {
@@ -87,7 +107,7 @@ def play_text(textin):
 
       "voice_settings": {
         "stability": 0.5,
-        "similarity_boost": 1
+        "similarity_boost": 0.5
       }
     }
     while True:
@@ -104,23 +124,49 @@ def play_text(textin):
         continue
 
 
-def play_sound():
+def play_sound(music_name):
     try:
       pygame.mixer.music.unload()
     except:
        pass
     pygame.mixer.init()
-    pygame.mixer.music.load("output.mp3")
+    pygame.mixer.music.load(music_name)
     pygame.mixer.music.play()
     # while pygame.mixer.music.get_busy(): # check if the file is playing
     #     pass
     # pygame.mixer.music.load("output_copy.mp3")
     # os.remove("output.mp3")
     # pygame.quit()
+
+        
 while True:
     try:
+        try:
+          while pygame.mixer.music.get_busy(): # check if the file is playing
+              pass
+        except Exception:
+           pass
+        
+        get_screenshot()
+        threading.Thread(target=play_sound, args=('tip.mp3',)).start()
+
+
         input_user = text()
-        if (input_user == "Google Speech Recognition could not understand audio") or ('Could not request results from Google Speech Recognition service' in input_user):
+        
+        image_parts = [
+          {
+            "mime_type": "image/png",
+            "data": Path("screenshot.png").read_bytes()
+          },
+        ]
+
+        prompt_parts = [
+          image_parts[0],
+          'Keep your replies short and sweet:' + input_user,
+        ]
+
+
+        if input_user == "Google Speech Recognition could not understand audio":
             continue
 #         elif input_user == 'refresh':
 #            convo = model.start_chat(history=[
@@ -135,10 +181,11 @@ while True:
 #     },
 # ])
         print(f'GreshAnt>{input_user}')
-        convo.send_message(input_user)
-        print(f'Neno>{convo.last.text}')
-        play_text(convo.last.text)
-        play_sound()
+        res = model.generate_content(prompt_parts)
+        print(f'Neno>{res.text}')
+        play_text(res.text)
+        # threading.Thread(target=play_sound, args=('output.mp3',)).start()
+        play_sound('output.mp3')
         # os.remove('output.mp3')
         # time.sleep(3)
     except Exception as e:
